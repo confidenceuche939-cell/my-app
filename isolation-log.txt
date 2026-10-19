@@ -1,0 +1,30 @@
+
+=== Démo d'isolation — http://localhost:3001/api — 2026-10-19T06:47:04.712Z ===
+
+— 1. Création des comptes
+✅ Inscription utilisateur A  →  HTTP 201, user.a.1792392424712@example.com
+✅ Inscription utilisateur B  →  HTTP 201, user.b.1792392424712@example.com
+
+— 2. Login
+✅ Login A renvoie un JWT  →  HTTP 200
+✅ Login avec mauvais mot de passe refusé  →  HTTP 401
+
+— 3. Routes protégées
+✅ GET /tasks sans token → 401  →  HTTP 401
+✅ GET /tasks avec faux token → 401  →  HTTP 401
+
+— 4. Chacun crée une tâche
+✅ A crée sa tâche  →  HTTP 201
+✅ B crée sa tâche  →  HTTP 201
+
+— 5. Isolation des listes
+✅ A ne voit que ses tâches  →  ["Tâche privée de A"]
+✅ B ne voit que ses tâches  →  ["Tâche privée de B"]
+
+— 6. B tente d'attaquer la tâche de A
+✅ B ne peut pas modifier la tâche de A (404)  →  HTTP 404
+✅ B ne peut pas supprimer la tâche de A (404)  →  HTTP 404
+✅ La tâche de A est intacte
+
+🎉 Tous les contrôles sont passés.
+
