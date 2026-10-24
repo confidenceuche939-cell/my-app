@@ -1,0 +1,18 @@
+
+> backend@1.0.0 smoke
+> ts-node src/scripts/smokeTest.ts https://task-manager-api-o87g.onrender.com https://my-app-pearl-two-69.vercel.app
+
+
+=== Smoke test — API https://task-manager-api-o87g.onrender.com/api — front https://my-app-pearl-two-69.vercel.app — 2026-10-24T15:54:25.392Z ===
+
+✅ Backend joignable (GET /health)  →  HTTP 200
+✅ CORS : le frontend est autorisé  →  Access-Control-Allow-Origin = https://my-app-pearl-two-69.vercel.app
+✅ Base de données + inscription (POST /auth/register)  →  HTTP 201
+✅ Login renvoie un JWT  →  HTTP 200
+✅ Route protégée sans token → 401  →  HTTP 401
+✅ Création de tâche (écriture en base)  →  HTTP 201
+✅ Lecture de la tâche (persistance)  →  ["Smoke test"]
+✅ WebSocket : évènement task:created reçu en temps réel
+
+🎉 Déploiement OK.
+
