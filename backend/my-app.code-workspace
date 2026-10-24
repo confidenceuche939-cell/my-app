@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "my-app",
+			"path": ".."
+		},
+		{
+			"name": "docs",
+			"path": "../../../../Téléchargements/my-app-jalon5-final/my-app/docs"
+		}
+	],
+	"settings": {}
+}
