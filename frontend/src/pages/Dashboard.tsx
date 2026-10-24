@@ -3,7 +3,14 @@ import type { Task } from '../types';
 import { TaskCard } from '../components/TaskCard';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { useRealtimeTasks } from '../hooks/useRealtimeTasks';
+import type { ConnectionState } from '../hooks/useRealtimeTasks';
 
+const CONNECTION_BADGE: Record<ConnectionState, { label: string; dot: string }> = {
+  connected: { label: 'Temps réel actif', dot: 'bg-emerald-500' },
+  connecting: { label: 'Connexion…', dot: 'bg-amber-400 animate-pulse' },
+  disconnected: { label: 'Hors ligne — reconnexion…', dot: 'bg-rose-500 animate-pulse' },
+};
 
 export type AppState = 'loading' | 'success' | 'empty' | 'error';
 
@@ -39,6 +46,25 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // ─── Mises à jour temps réel (WebSocket) ──────────────────────────────────
+  // Les handlers sont idempotents : l'onglet qui a lui-même déclenché l'action
+  // reçoit aussi l'évènement, sans doublon ni conflit.
+  const connection = useRealtimeTasks({
+    onCreated: (task) =>
+      setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev : [task, ...prev])),
+    onUpdated: (task) =>
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t))),
+    onDeleted: (id) => setTasks((prev) => prev.filter((t) => t.id !== id)),
+    onResync: () => {
+      // Après une coupure : recharge silencieusement pour rattraper les évènements manqués.
+      apiFetch('/tasks')
+        .then((res) => (res.ok ? (res.json() as Promise<Task[]>) : null))
+        .then((data) => data && setTasks(data))
+        .catch(() => undefined);
+    },
+    onUnauthorized: logout,
+  });
 
   // ─── Toggle completed ─────────────────────────────────────────────────────
   const handleToggleTask = async (id: string) => {
@@ -103,7 +129,7 @@ export const Dashboard: React.FC = () => {
       });
       if (!res.ok) throw new Error('Failed to create task');
       const created: Task = await res.json();
-      setTasks((prev) => [created, ...prev]);
+      setTasks((prev) => (prev.some((t) => t.id === created.id) ? prev : [created, ...prev]));
       setNewTaskTitle('');
       setStatus('success');
     } catch (err) {
@@ -112,6 +138,14 @@ export const Dashboard: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  // État d'affichage dérivé : la liste peut se vider/se remplir via WebSocket sans passer par loadTasks.
+  const viewStatus: AppState =
+    status === 'success' && tasks.length === 0
+      ? 'empty'
+      : status === 'empty' && tasks.length > 0
+        ? 'success'
+        : status;
 
   const completedCount = tasks.filter((t) => t.completed).length;
 
@@ -123,6 +157,10 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-500">
             Connecté en tant que <strong className="text-slate-900 dark:text-slate-100">{user?.email}</strong>
+            <span className="ml-3 inline-flex items-center gap-1.5 text-xs" aria-live="polite">
+              <span className={`h-2 w-2 rounded-full ${CONNECTION_BADGE[connection].dot}`} />
+              {CONNECTION_BADGE[connection].label}
+            </span>
           </span>
           <button
             type="button"
@@ -143,7 +181,7 @@ export const Dashboard: React.FC = () => {
               </h2>
             </div>
             <span className="text-xs text-indigo-300 font-mono">
-              État actuel : <strong className="uppercase underline text-white">{status}</strong>
+              État actuel : <strong className="uppercase underline text-white">{viewStatus}</strong>
             </span>
           </div>
 
@@ -176,7 +214,7 @@ export const Dashboard: React.FC = () => {
               </p>
             </div>
 
-            {status === 'success' && (
+            {viewStatus === 'success' && (
               <div className="flex items-center space-x-3 bg-slate-100 dark:bg-slate-800/80 px-4 py-2 rounded-2xl border border-slate-200/60 dark:border-slate-700">
                 <div className="text-center">
                   <span className="block text-xl font-bold text-indigo-600 dark:text-indigo-400">
@@ -191,7 +229,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Quick Add Form */}
-          {(status === 'success' || status === 'empty') && (
+          {(viewStatus === 'success' || viewStatus === 'empty') && (
             <form onSubmit={handleAddTask} className="flex gap-3">
               <input
                 type="text"
@@ -230,7 +268,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* 1. LOADING STATE */}
-          {status === 'loading' && (
+          {viewStatus === 'loading' && (
             <div className="py-16 text-center space-y-4">
               <div className="inline-flex items-center justify-center p-4 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 animate-spin">
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24">
@@ -250,7 +288,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* 2. EMPTY STATE */}
-          {status === 'empty' && (
+          {viewStatus === 'empty' && (
             <div className="py-16 text-center space-y-4 bg-slate-50/50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-2xl">
                 📭
@@ -267,7 +305,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* 3. ERROR STATE */}
-          {status === 'error' && (
+          {viewStatus === 'error' && (
             <div className="py-12 px-6 text-center space-y-4 bg-rose-50 dark:bg-rose-950/20 rounded-2xl border border-rose-200 dark:border-rose-900/50">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 text-xl font-bold">
                 ⚠️
@@ -295,7 +333,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* 4. SUCCESS STATE */}
-          {status === 'success' && (
+          {viewStatus === 'success' && (
             <div className="space-y-3">
               {tasks.length === 0 ? (
                 <div className="py-8 text-center text-slate-400 text-sm">

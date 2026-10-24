@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import * as TaskService from '../services/task.service';
+import { emitToUser } from '../socket';
 
 // Les routes sont derrière `protect` : req.user est toujours défini ici.
 // On revérifie par sécurité plutôt que d'utiliser un "!" qui masquerait un oubli de middleware.
@@ -41,6 +42,7 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
   try {
     const task = await TaskService.createTask(title.trim(), userId);
     res.status(201).json(task);
+    emitToUser(userId, 'task:created', task);
   } catch (error) {
     console.error('[createTask]', error);
     res.status(500).json({ error: 'Failed to create task' });
@@ -80,6 +82,7 @@ export const updateTask = async (req: Request, res: Response): Promise<void> => 
       return;
     }
     res.status(200).json(updated);
+    emitToUser(userId, 'task:updated', updated);
   } catch (error) {
     console.error('[updateTask]', error);
     res.status(500).json({ error: 'Failed to update task' });
@@ -100,6 +103,7 @@ export const deleteTask = async (req: Request, res: Response): Promise<void> => 
       return;
     }
     res.status(204).send();
+    emitToUser(userId, 'task:deleted', { id });
   } catch (error) {
     console.error('[deleteTask]', error);
     res.status(500).json({ error: 'Failed to delete task' });

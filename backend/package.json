@@ -5,13 +5,14 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
+    "build": "prisma generate && tsc",
+    "start": "prisma migrate deploy && node dist/server.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "test": "vitest run",
-    "demo:isolation": "ts-node src/scripts/isolationDemo.ts"
+    "demo:isolation": "ts-node src/scripts/isolationDemo.ts",
+    "smoke": "ts-node src/scripts/smokeTest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -19,7 +20,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "prisma": "^6.19.3",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -29,15 +32,18 @@
     "@types/node": "^22.10.2",
     "@types/supertest": "^7.2.1",
     "nodemon": "^3.1.9",
-    "prisma": "^6.19.3",
+    "socket.io-client": "^4.8.4",
     "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
     "vitest": "^5.0.5"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "allowScripts": {
     "@prisma/client@6.19.3": true,
-    "prisma@6.19.3": true,
-    "@prisma/engines@6.19.3": true
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true
   }
 }

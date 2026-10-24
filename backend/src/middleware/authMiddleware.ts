@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config';
+import { verifyToken } from '../lib/token';
 
 // Ajoute `req.user` au type Request d'Express.
 declare global {
@@ -22,15 +21,12 @@ export const protect = (req: Request, res: Response, next: NextFunction): void =
     return;
   }
 
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
-    if (typeof decoded === 'string' || typeof decoded.userId !== 'string') {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-    req.user = { id: decoded.userId };
-    next();
-  } catch {
+  const userId = verifyToken(token);
+  if (!userId) {
     res.status(401).json({ error: 'Invalid or expired token' });
+    return;
   }
+
+  req.user = { id: userId };
+  next();
 };

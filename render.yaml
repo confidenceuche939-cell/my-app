@@ -1,0 +1,22 @@
+# Blueprint Render (optionnel) : "New + → Blueprint" crée le service backend depuis ce fichier.
+# Vous pouvez aussi tout configurer à la main dans le dashboard (voir docs/DEPLOYMENT.md).
+services:
+  - type: web
+    name: task-manager-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start            # = prisma migrate deploy && node dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false                    # à coller dans le dashboard (jamais dans Git)
+      - key: JWT_SECRET
+        generateValue: true            # secret aléatoire généré par Render
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGIN
+        sync: false                    # URL Vercel du frontend, ex : https://mon-app.vercel.app

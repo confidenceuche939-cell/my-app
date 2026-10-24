@@ -2,13 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes';
 import taskRoutes from './routes/task.routes';
+import { getAllowedOrigins } from './lib/origins';
 
 export const app = express();
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173', // Vite dev server par défaut
+    origin: getAllowedOrigins(), // CORS_ORIGIN (liste séparée par des virgules)
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })

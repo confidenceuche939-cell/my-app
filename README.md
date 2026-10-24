@@ -1,192 +1,256 @@
-# Task Manager — Full-Stack App
+# Task Manager — Full-Stack TypeScript
 
-Application de gestion de tâches multi-utilisateurs : **React + TypeScript + Tailwind** (frontend) et **Express + TypeScript + Prisma + PostgreSQL** (backend), avec authentification **JWT** et mots de passe hachés (**bcrypt**).
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Node](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-4169E1?logo=postgresql&logoColor=white)
+![Socket.io](https://img.shields.io/badge/Socket.io-realtime-010101?logo=socketdotio&logoColor=white)
 
-- Frontend déployé : `<URL Vercel/Netlify à ajouter>`
-- API déployée (optionnel) : `<URL du backend à ajouter>`
+Application web de gestion de tâches **multi-utilisateurs** avec authentification sécurisée et **synchronisation en temps réel** entre tous vos onglets et appareils. Projet de fin de parcours Mint Technologies : une application complète, typée de bout en bout (frontend, API, base de données) et déployée dans le cloud.
 
----
+## 🔗 Liens
 
-## Structure
+| | |
+|---|---|
+| **Application (frontend)** | `<URL Vercel à ajouter>` |
+| **API (backend)** | `<URL Render à ajouter>` — santé : `<URL Render>/health` |
+| **Démo vidéo** | `docs/demo.gif` (voir plus bas) |
+
+> ⏱️ Le backend gratuit se met en veille après inactivité : la **première** requête peut prendre environ une minute.
+
+![Démo temps réel](docs/demo.gif)
+
+## ✨ Fonctionnalités
+
+- **Comptes utilisateurs** : inscription, connexion, déconnexion, session persistante (JWT).
+- **Gestion des tâches** : créer, cocher, supprimer, avec mises à jour optimistes.
+- **Isolation des données** : chaque utilisateur ne voit et ne modifie que ses propres tâches.
+- **Temps réel (WebSockets)** : un changement fait dans un onglet apparaît instantanément dans les autres, avec reconnexion automatique et resynchronisation.
+- **États d'interface soignés** : chargement, liste vide, erreur, retour utilisateur sur chaque échec.
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+  subgraph Client["Navigateur"]
+    UI["React 19 + TypeScript + Tailwind<br/>AuthContext · Dashboard · useRealtimeTasks"]
+  end
+  subgraph Vercel["Vercel"]
+    FE["Build statique Vite"]
+  end
+  subgraph Render["Render"]
+    direction TB
+    MW["Middleware : CORS · JSON · protect (JWT)"]
+    CTRL["Controllers → Services"]
+    WS["Socket.io : auth JWT + rooms user:id"]
+    MW --> CTRL
+    CTRL -- "emitToUser()" --> WS
+  end
+  DB[("PostgreSQL<br/>User · Task")]
+
+  FE -. "sert l'application" .-> UI
+  UI -- "REST /api/* + Authorization: Bearer" --> MW
+  UI <-- "WebSocket (JWT)" --> WS
+  CTRL -- "Prisma ORM (requêtes filtrées par userId)" --> DB
+```
+
+### Cycle d'une requête : création d'une tâche
+
+```mermaid
+sequenceDiagram
+  participant A1 as Onglet 1 (compte A)
+  participant A2 as Onglet 2 (compte A)
+  participant API as API Express
+  participant DB as PostgreSQL
+  A1->>API: POST /api/tasks (Bearer JWT)
+  API->>API: protect : vérifie le JWT → req.user.id
+  API->>DB: INSERT Task (userId = A)
+  API-->>A1: 201 Task
+  API-->>A1: WS task:created (room user:A)
+  API-->>A2: WS task:created (room user:A)
+  Note over A1,A2: Dédoublonnage par id côté client
+```
+
+### Modèle de données
+
+```mermaid
+erDiagram
+  USER ||--o{ TASK : possède
+  USER {
+    uuid id PK
+    string email UK
+    string passwordHash
+    datetime createdAt
+  }
+  TASK {
+    uuid id PK
+    string title
+    boolean completed
+    datetime createdAt
+    datetime updatedAt
+    uuid userId FK
+  }
+```
+
+### Décisions de conception
+
+- **Couches séparées** (routes → controllers → services) : la validation HTTP est isolée de l'accès aux données.
+- **Isolation par construction** : tous les accès Prisma sont filtrés par `userId`. Une tâche d'autrui renvoie `404` (et non `403`) pour ne pas révéler son existence.
+- **Un seul mécanisme d'authentification** pour REST et WebSocket (`lib/token.ts`).
+- **Évènements idempotents** : le client qui agit reçoit aussi l'évènement sans créer de doublon.
+- **Échec rapide** : le serveur refuse de démarrer sans `JWT_SECRET` valide.
+
+## 🧰 Stack technique
+
+| Couche | Technologies |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v3, socket.io-client |
+| Backend | Node.js, Express 4, TypeScript, Socket.io |
+| Base de données | PostgreSQL, Prisma ORM 6 (migrations versionnées) |
+| Sécurité | bcryptjs (hachage), jsonwebtoken (JWT HS256), CORS configurable |
+| Tests | Vitest, Supertest, socket.io-client |
+| Déploiement | Vercel (frontend), Render (API), Neon ou Render PostgreSQL |
+
+## 📁 Structure du dépôt
 
 ```
 my-app/
-├── frontend/               # React + Vite + Tailwind v3
+├── frontend/                 # React + Vite + Tailwind
+│   ├── vercel.json
 │   └── src/
-│       ├── components/     # TaskCard.tsx
-│       ├── pages/          # Dashboard.tsx (états loading / empty / error)
-│       ├── types/          # Interface Task
-│       ├── App.tsx
-│       └── main.tsx
-├── backend/                # Express + TypeScript + Prisma
-│   ├── prisma/schema.prisma
-│   └── src/
-│       ├── middleware/     # authMiddleware.ts (protect)
-│       ├── routes/         # authRoutes.ts, task.routes.ts
-│       ├── controllers/    # authController.ts, task.controller.ts
-│       ├── services/       # task.service.ts (requêtes filtrées par userId)
-│       ├── scripts/        # isolationDemo.ts (preuve d'isolation A/B)
-│       ├── lib/prisma.ts   # singleton PrismaClient
-│       ├── config.ts       # JWT_SECRET (vérifié au démarrage)
-│       ├── app.ts          # application Express
-│       └── server.ts
-│   └── tests/              # tests Vitest + Supertest
+│       ├── components/       # TaskCard.tsx
+│       ├── context/          # AuthContext.ts, AuthProvider.tsx
+│       ├── hooks/            # useAuth.ts, useRealtimeTasks.ts
+│       ├── lib/              # api.ts (fetch + JWT), socket.ts
+│       ├── pages/            # AuthPage.tsx, Dashboard.tsx
+│       └── types/            # Task, User, AuthResponse
+├── backend/                  # Express + Prisma
+│   ├── prisma/               # schema.prisma + migrations/
+│   ├── src/
+│   │   ├── controllers/      # authController.ts, task.controller.ts
+│   │   ├── middleware/       # authMiddleware.ts (protect)
+│   │   ├── routes/           # authRoutes.ts, task.routes.ts
+│   │   ├── services/         # task.service.ts
+│   │   ├── lib/              # prisma.ts, token.ts, origins.ts
+│   │   ├── scripts/          # isolationDemo.ts, smokeTest.ts
+│   │   ├── socket.ts         # Socket.io (auth, rooms, emitToUser)
+│   │   ├── config.ts · app.ts · server.ts
+│   └── tests/                # auth, isolation, WebSocket, CORS
+├── postman/                  # collection Postman
+├── docs/                     # DEPLOYMENT.md, demo.gif, captures
+├── render.yaml               # Blueprint Render (optionnel)
 └── README.md
 ```
 
-## Prérequis
+## 🚀 Démarrage en local
 
-- Node.js v18+
-- PostgreSQL installé et démarré
-
-## Installation
-
-### 1. Cloner
+**Prérequis** : Node.js 20+, PostgreSQL installé et démarré.
 
 ```bash
+# 1. Cloner
 git clone <url-du-depot>
 cd my-app
-```
 
-### 2. Base de données et backend
+# 2. Base de données
+#    (psql) CREATE DATABASE taskmanager_db;
 
-```sql
-CREATE DATABASE taskmanager_db;
-```
-
-```bash
+# 3. Backend
 cd backend
-cp .env.example .env      # puis renseignez DATABASE_URL et JWT_SECRET
+cp .env.example .env        # renseignez DATABASE_URL et JWT_SECRET
 npm install
-npm run db:migrate        # crée les tables User et Task (nom de migration : add_auth)
-npm run dev               # http://localhost:3001
+npm run db:migrate          # crée les tables (donnez un nom, ex : init)
+npm run dev                 # http://localhost:3001
+
+# 4. Frontend (nouveau terminal)
+cd frontend
+cp .env.example .env
+npm install
+npm run dev                 # http://localhost:5173
 ```
 
-### 3. Frontend (nouveau terminal)
+Générer un `JWT_SECRET` :
 
 ```bash
-cd frontend
-cp .env.example .env      # VITE_API_URL=http://localhost:3001/api
-npm install
-npm run dev               # http://localhost:5173
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-## Variables d'environnement
+### Variables d'environnement
 
 | Fichier | Variable | Rôle |
 |---|---|---|
-| `backend/.env` | `DATABASE_URL` | Connexion PostgreSQL |
+| `backend/.env` | `DATABASE_URL` | Chaîne de connexion PostgreSQL |
 | `backend/.env` | `JWT_SECRET` | Secret de signature des JWT (16+ caractères, **obligatoire**) |
 | `backend/.env` | `JWT_EXPIRES_IN` | Durée de validité du token (défaut `7d`) |
-| `backend/.env` | `PORT` | Port du serveur (3001) |
-| `backend/.env` | `CORS_ORIGIN` | URL du frontend autorisée |
-| `frontend/.env` | `VITE_API_URL` | URL de l'API (avec `/api`) |
+| `backend/.env` | `CORS_ORIGIN` | URL(s) du frontend autorisée(s), séparées par des virgules |
+| `backend/.env` | `PORT` | Port du serveur (défaut 3001 ; fourni par l'hébergeur en production) |
+| `frontend/.env` | `VITE_API_URL` | URL de l'API **avec** `/api` |
+| `frontend/.env` | `VITE_SOCKET_URL` | (optionnel) URL WebSocket, par défaut l'origine de `VITE_API_URL` |
 
-## Référence de l'API
+Les fichiers `.env` sont ignorés par Git ; seuls les `.env.example` sont versionnés.
 
-Base URL : `http://localhost:3001`
+## 📡 Référence de l'API
+
+Base : `http://localhost:3001` · 🔒 = header `Authorization: Bearer <token>` requis.
 
 | Méthode | Endpoint | Description | Corps | Réponse |
 |---|---|---|---|---|
-| `POST` | `/api/auth/register` | Crée un compte, renvoie un JWT | `{ "email", "password" (8+ car.) }` | `201` `{ token, user }` |
-| `POST` | `/api/auth/login` | Connexion, renvoie un JWT | `{ "email", "password" }` | `200` `{ token, user }` |
-| `GET` | `/api/auth/me` | Utilisateur courant 🔒 | — | `200` `{ id, email }` |
-| `GET` | `/api/tasks` 🔒 | Liste **vos** tâches (plus récentes d'abord) | — | `200` `Task[]` |
-| `POST` | `/api/tasks` 🔒 | Crée une tâche | `{ "title": "string" }` | `201` `Task` |
-| `PATCH` | `/api/tasks/:id` 🔒 | Modifie titre et/ou état | `{ "title"?: "string", "completed"?: boolean }` | `200` `Task` |
+| `POST` | `/api/auth/register` | Crée un compte | `{ email, password (8+) }` | `201` `{ token, user }` |
+| `POST` | `/api/auth/login` | Connexion | `{ email, password }` | `200` `{ token, user }` |
+| `GET` | `/api/auth/me` 🔒 | Utilisateur courant | — | `200` `{ id, email }` |
+| `GET` | `/api/tasks` 🔒 | Vos tâches (récentes d'abord) | — | `200` `Task[]` |
+| `POST` | `/api/tasks` 🔒 | Crée une tâche | `{ title }` | `201` `Task` |
+| `PATCH` | `/api/tasks/:id` 🔒 | Modifie titre et/ou état | `{ title?, completed? }` | `200` `Task` |
 | `DELETE` | `/api/tasks/:id` 🔒 | Supprime une tâche | — | `204` |
-| `GET` | `/health` | Health check | — | `200` `{ status, timestamp }` |
+| `GET` | `/health` | Santé du service | — | `200` `{ status, timestamp }` |
 
-🔒 = header `Authorization: Bearer <token>` obligatoire.
+Erreurs (toujours `{ "error": "message" }`) : `400` validation · `401` token absent/invalide/expiré ou identifiants incorrects · `404` tâche introuvable **ou appartenant à un autre utilisateur** · `409` email déjà utilisé · `500` erreur serveur.
 
-Erreurs : `400` (validation), `401` (token absent/invalide/expiré, identifiants incorrects), `404` (tâche introuvable **ou appartenant à un autre utilisateur**), `409` (email déjà utilisé), `500` (erreur serveur), toutes au format `{ "error": "message" }`.
-
-### Modèle Task
-
-```json
-{
-  "id": "uuid",
-  "title": "string",
-  "completed": false,
-  "createdAt": "2026-01-01T00:00:00.000Z",
-  "updatedAt": "2026-01-01T00:00:00.000Z",
-  "userId": "uuid du propriétaire"
-}
-```
-
-### Exemples
+**WebSocket** (Socket.io, authentification par `auth: { token }`) — évènements serveur → client : `task:created` (tâche), `task:updated` (tâche), `task:deleted` (`{ id }`), reçus uniquement par les connexions du propriétaire.
 
 ```bash
-# 1. Inscription (ou /api/auth/login) → récupérer le token
+# Exemple
 curl -X POST http://localhost:3001/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "alice@example.com", "password": "password123"}'
+  -d '{"email":"alice@example.com","password":"password123"}'
 
-# 2. Utiliser le token
 curl -X POST http://localhost:3001/api/tasks \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"title": "Learn Prisma"}'
-
-curl -X PATCH http://localhost:3001/api/tasks/<id> \
-  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"completed": true}'
-
-curl -X DELETE http://localhost:3001/api/tasks/<id> -H "Authorization: Bearer <token>"
+  -d '{"title":"Learn Prisma"}'
 ```
 
-## Authentification
+Une collection Postman est fournie : `postman/task-manager.postman_collection.json` (le token est enregistré automatiquement après Register/Login).
 
-**Fonctionnement**
-1. `POST /api/auth/register` : le mot de passe est haché avec **bcrypt** (10 tours, sel intégré) ; seul le hash (`passwordHash`) est stocké. Un JWT (HS256, 7 jours par défaut) est renvoyé.
-2. `POST /api/auth/login` : compare le mot de passe au hash. Réponse identique (`401 Invalid email or password`) que l'email existe ou non, pour ne pas révéler les comptes inscrits.
-3. Le middleware `protect` (`src/middleware/authMiddleware.ts`) vérifie le JWT du header `Authorization: Bearer <token>` et place `req.user.id` sur la requête.
-4. Toutes les routes `/api/tasks` passent par `protect`, et **chaque requête Prisma est filtrée par `userId`** (`src/services/task.service.ts`). Une tâche d'un autre utilisateur renvoie `404`.
-5. Côté frontend, le token est conservé dans `localStorage` et ajouté automatiquement à chaque appel (`src/lib/api.ts`). Un `401` ramène à l'écran de connexion.
+## 🔐 Sécurité
 
-**Choix de sécurité**
-- `JWT_SECRET` obligatoire : le serveur refuse de démarrer sans lui.
-- Mot de passe : 8 caractères minimum ; email normalisé en minuscules et unique.
-- Limite connue : `localStorage` est exposé en cas de faille XSS ; pour la production, un cookie `httpOnly` serait plus sûr. Pas non plus de limitation de débit (rate limiting) sur le login.
+- **Mots de passe** : hachés avec bcrypt (10 tours, sel intégré) ; seul `passwordHash` est stocké. Vérifiable avec `npx prisma studio` (valeurs `$2a$10$...`).
+- **JWT** HS256, expiration configurable, algorithme imposé à la vérification.
+- **Anti-énumération** : le login renvoie la même erreur que l'email existe ou non (avec un temps de calcul équivalent).
+- **Isolation** : requêtes filtrées par `userId` (REST) et rooms privées (WebSocket).
+- **CORS** restreint aux origines déclarées dans `CORS_ORIGIN`.
+- **Secrets** uniquement dans les variables d'environnement de l'hébergeur ; aucun secret dans Git.
+- **Limites connues** : token en `localStorage` (exposé en cas de XSS ; un cookie `httpOnly` serait préférable en production) et pas de limitation de débit (rate limiting) sur le login.
 
-### Vérifier que les mots de passe sont hachés
-
-```bash
-cd backend && npx prisma studio       # table User → colonne passwordHash
-```
-ou en SQL : `SELECT email, "passwordHash" FROM "User";` → les valeurs commencent par `$2a$10$...` (jamais le mot de passe en clair).
-
-### Prouver l'isolation entre deux comptes
-
-Serveur lancé (`npm run dev`), dans un autre terminal :
+## 🧪 Tests
 
 ```bash
 cd backend
-npm run demo:isolation                          # affiche les étapes ✅ / ❌
-npm run demo:isolation > ../isolation-log.txt   # garde le log comme preuve
+npm test                    # 12 tests : auth, hachage, isolation A/B, WebSocket, CORS
+npm run demo:isolation      # démo A/B contre un serveur lancé (voir isolation-log.txt)
+npm run smoke -- <url-backend> <url-frontend>   # contrôle d'un déploiement en ligne
 ```
 
-Le script crée l'utilisateur A et l'utilisateur B, vérifie que chacun ne voit que ses tâches, que B reçoit `404` en tentant de modifier ou supprimer une tâche de A, et que les requêtes sans token ou avec un faux token reçoivent `401`.
-Des tests automatiques équivalents tournent sans base de données avec `npm test`.
+Les tests utilisent une base en mémoire (pas de PostgreSQL requis) et un vrai serveur Socket.io avec de vrais clients.
 
-## Stack
+## ☁️ Déploiement
 
-| Couche | Technologie |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS v3 |
-| Backend | Express 4, TypeScript, ts-node, bcryptjs, jsonwebtoken |
-| ORM | Prisma 6 |
-| Base de données | PostgreSQL |
+Frontend sur **Vercel**, API sur **Render**, base **PostgreSQL** (Neon ou Render). Les migrations s'appliquent automatiquement au démarrage (`prisma migrate deploy`). Guide pas à pas, variables d'environnement, vérifications et dépannage : **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-## Scripts
+## 🧭 Pistes d'amélioration
 
-**Backend** (`cd backend`) : `npm run dev`, `npm run build`, `npm run db:migrate`, `npm run db:generate`, `npm run db:studio`, `npm test`, `npm run demo:isolation`
+- Cookie `httpOnly` + refresh tokens, limitation de débit sur l'authentification.
+- Pagination et filtres sur les tâches, partage de tâches entre utilisateurs.
+- Tests de bout en bout (Playwright) et intégration continue (GitHub Actions).
 
-**Frontend** (`cd frontend`) : `npm run dev`, `npm run build`, `npm run lint`
+## 👤 Auteur
 
-## Tests API
-
-Collection Postman : `postman/task-manager.postman_collection.json`. Lancez `Register` ou `Login` : le token est enregistré automatiquement dans la variable `token`, utilisée par les requêtes de tâches.
-
-## Déploiement
-
-- **Frontend** : Vercel/Netlify, dossier racine `frontend`, commande `npm run build`, sortie `dist`, variable `VITE_API_URL` = URL du backend.
-- **Backend** : hébergeur Node (Render, Railway…), variables `DATABASE_URL` et `CORS_ORIGIN`.
+**[Votre nom]** — [LinkedIn](<lien>) · [GitHub](<lien>)
